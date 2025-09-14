@@ -2,6 +2,10 @@ import subprocess
 import os
 import sys
 
+# --- Configuration ---
+LDPLAYER_ADB_ADDRESS = "localhost:5555"
+# --- End Configuration ---
+
 # Ensure UTF-8 output on Windows consoles to avoid UnicodeEncodeError
 if os.name == 'nt':
     try:
@@ -11,10 +15,18 @@ if os.name == 'nt':
         pass
     os.system('chcp 65001 >NUL')
 
+def connect_to_device():
+    """Tries to connect to the specified ADB address."""
+    print(f"Đang kết nối tới LDPlayer tại {LDPLAYER_ADB_ADDRESS}...")
+    # Use shell=True for safety on Windows with complex commands
+    subprocess.run(['adb', 'connect', LDPLAYER_ADB_ADDRESS], capture_output=True, text=True, shell=True)
+
 def check_device_connection():
     """
     Sử dụng lệnh 'adb devices' để kiểm tra các thiết bị đang kết nối.
     """
+    connect_to_device()
+    
     print("Đang kiểm tra kết nối với LDPlayer...")
     
     # Chạy lệnh 'adb devices' và lấy kết quả trả về
@@ -27,8 +39,8 @@ def check_device_connection():
     print("----------------------\n")
     
     # Phân tích kết quả
-    if "emulator" in result.stdout or "127.0.0.1" in result.stdout:
-        print("✅ Thành công! Đã tìm thấy LDPlayer.")
+    if LDPLAYER_ADB_ADDRESS in result.stdout:
+        print(f"✅ Thành công! Đã tìm thấy LDPlayer tại {LDPLAYER_ADB_ADDRESS}.")
     else:
         print("❌ Thất bại! Không tìm thấy LDPlayer.")
         print("Gợi ý: Hãy chắc chắn rằng LDPlayer đang chạy và bạn đã bật USB Debugging.")
