@@ -128,7 +128,7 @@ def auto_login_garena(username, password, garena_url="https://account.garena.com
     # Mở trang đăng nhập
     print(f"Mở trang đăng nhập Garena: {garena_url}")
     open_url_in_chrome(garena_url)
-    time.sleep(1)  # Đợi trang web tải
+    time.sleep(2)  # Đợi trang web tải
     
     # Thực hiện đăng nhập
     login_garena(username, password)
