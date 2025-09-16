@@ -120,6 +120,7 @@ def change_garena_password(username, password, current_password, new_password):
         {
             "action": "login",
             "description": "Thực hiện đăng nhập",
+            "delay": 1.5,
             "element": {
                 "username_coords": [176, 318],
                 "password_coords": [176, 390],
@@ -129,7 +130,7 @@ def change_garena_password(username, password, current_password, new_password):
         {
             "action": "click",
             "description": "Nhấn vào mục 'Menu'",
-            "delay": 5,
+            "delay": 1.5,
             "element": {
                 "type": "coords",
                 "coords": [32, 150]
@@ -239,7 +240,7 @@ def change_garena_password(username, password, current_password, new_password):
         print(f"\nThực hiện bước: {description}")
 
         # Add a delay before each action
-        time.sleep(step.get('delay', random.uniform(1, 1.5)))
+        time.sleep(step.get('delay', random.uniform(0.5, 1)))
 
         if action == 'navigate':
             open_url_in_chrome(step['url'])
