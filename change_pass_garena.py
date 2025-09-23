@@ -95,7 +95,7 @@ def check_any_keyword_present(keywords, retries=15, interval_seconds=1.0, contex
             print(f"Phát hiện từ khóa thành công ({context_label}): {keywords}")
             return True
         print(f"Chưa thấy từ khóa ({context_label}). Thử lại {attempt}/{retries}...")
-
+        
         time.sleep(interval_seconds)
     return False
 
@@ -358,14 +358,10 @@ def change_garena_password(username, password, current_password, new_password):
             if check_type == 'login_success':
                 ok = check_any_keyword_present(LOGIN_SUCCESS_KEYWORDS, retries=retries, interval_seconds=interval, context_label="login")
                 if not ok:
-                    # with open("error.txt", "a", encoding="utf-8") as out_f:
-                    #     out_f.write(f"{username}|{password}|LoiDangNhap\n")
                     raise RuntimeError("LoiDangNhap")
             elif check_type == 'change_success':
                 ok = check_any_keyword_present(CHANGE_PASS_SUCCESS_KEYWORDS, retries=retries, interval_seconds=interval, context_label="change_password")
                 if not ok:
-                    # with open("error.txt", "a", encoding="utf-8") as out_f:
-                    #     out_f.write(f"{username}|{password}|LoiDoiMatKhau\n")
                     raise RuntimeError("LoiDoiMatKhau")
         else:
             print(f"Hành động không xác định: {action}")
@@ -393,7 +389,7 @@ if __name__ == "__main__":
         if "|" not in line:
             print(f"Bỏ qua dòng không hợp lệ: {line}")
             continue
-        username, password = [p.strip() for p in line.split("|", 1)]
+        username, password = [p.strip() for p in line.split("|")[:2]]
         if not username or not password:
             print(f"Bỏ qua dòng thiếu thông tin: {line}")
             continue
