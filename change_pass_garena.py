@@ -82,7 +82,7 @@ def extract_text_from_ui_xml(xml_content):
     combined = "\n".join(t.strip() for t in texts if t and t.strip())
     return combined
 
-def check_any_keyword_present(keywords, retries=15, interval_seconds=1.0, context_label=""):
+def check_any_keyword_present(keywords, retries=10, interval_seconds=0.5, context_label=""):
     """Polls the current screen for any of the given keywords (case-insensitive)."""
     normalized_keywords = [k.strip().lower() for k in keywords if k and k.strip()]
     for attempt in range(1, retries + 1):
@@ -95,7 +95,7 @@ def check_any_keyword_present(keywords, retries=15, interval_seconds=1.0, contex
             print(f"Phát hiện từ khóa thành công ({context_label}): {keywords}")
             return True
         print(f"Chưa thấy từ khóa ({context_label}). Thử lại {attempt}/{retries}...")
-        
+
         time.sleep(interval_seconds)
     return False
 
@@ -187,7 +187,7 @@ def change_garena_password(username, password, current_password, new_password):
             "action": "check",
             "description": "Kiểm tra đăng nhập thành công",
             "check_type": "login_success",
-            "retries": 10,
+            "retries": 6,
             "interval": 0.5
         },
         {
@@ -278,7 +278,7 @@ def change_garena_password(username, password, current_password, new_password):
             "action": "check",
             "description": "Kiểm tra đổi mật khẩu thành công",
             "check_type": "change_success",
-            "retries": 10,
+            "retries": 6,
             "interval": 0.5
         },
         {
@@ -416,7 +416,7 @@ if __name__ == "__main__":
             sys.exit(130)
         except Exception as e:
             print(f"Lỗi khi xử lý tài khoản {username}: {e}")
-            with open("error.txt", "a", encoding="utf-8") as out_f:
-                out_f.write(f"{username}|{password}|{e}\n")
+            # with open("error.txt", "a", encoding="utf-8") as out_f:
+            #     out_f.write(f"{username}|{password}|{e}\n")
         # Nghỉ ngắn giữa các tài khoản để tránh bị chặn
         time.sleep(2)
