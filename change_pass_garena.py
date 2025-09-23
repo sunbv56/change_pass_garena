@@ -4,6 +4,7 @@ import sys
 import os
 import random
 import string
+import re
 
 # --- Configuration ---
 LDPLAYER_ADB_ADDRESS = "localhost:5555"
@@ -53,6 +54,61 @@ def adb_command(cmd):
     """Executes an ADB command targeted at the specific device."""
     full_cmd = f"adb -s {LDPLAYER_ADB_ADDRESS} {cmd}"
     subprocess.run(full_cmd, shell=True)
+
+def adb_capture(cmd):
+    """Executes an ADB command and captures stdout as text."""
+    full_cmd = f"adb -s {LDPLAYER_ADB_ADDRESS} {cmd}"
+    result = subprocess.run(full_cmd, capture_output=True, text=True, shell=True)
+    return result.stdout or ""
+
+def dump_ui_xml():
+    """Dumps current UI hierarchy to XML on device and returns its content."""
+    # Dump to a known path
+    adb_command("shell uiautomator dump /sdcard/window_dump.xml")
+    # Read the dumped file
+    xml_content = adb_capture("shell cat /sdcard/window_dump.xml")
+    return xml_content
+
+def extract_text_from_ui_xml(xml_content):
+    """Extracts visible text/content-desc values from UIAutomator XML."""
+    if not xml_content:
+        return ""
+    texts = []
+    # text attributes
+    texts.extend(re.findall(r'text="([^"]+)"', xml_content))
+    # content-desc attributes (accessibility)
+    texts.extend(re.findall(r'content-desc="([^"]+)"', xml_content))
+    # Join and normalize whitespace
+    combined = "\n".join(t.strip() for t in texts if t and t.strip())
+    return combined
+
+def check_any_keyword_present(keywords, retries=15, interval_seconds=1.0, context_label=""):
+    """Polls the current screen for any of the given keywords (case-insensitive)."""
+    normalized_keywords = [k.strip().lower() for k in keywords if k and k.strip()]
+    for attempt in range(1, retries + 1):
+        xml = dump_ui_xml()
+        extracted = extract_text_from_ui_xml(xml)
+        haystack = (extracted or xml or "").lower()
+        # print("DEBUG haystack:", repr(haystack))
+        # print("DEBUG normalized_keywords:", normalized_keywords)
+        if any(k in haystack for k in normalized_keywords):
+            print(f"Phát hiện từ khóa thành công ({context_label}): {keywords}")
+            return True
+        print(f"Chưa thấy từ khóa ({context_label}). Thử lại {attempt}/{retries}...")
+
+        time.sleep(interval_seconds)
+    return False
+
+# --- Success Keyword Sets ---
+LOGIN_SUCCESS_KEYWORDS = [
+    "SECURITY LEVEL",
+    "SENSITIVE OPERATION",
+    "LOG IN HISTORY",
+]
+
+CHANGE_PASS_SUCCESS_KEYWORDS = [
+    "account.garena.com/security/password/done",
+]
 
 def open_url_in_chrome(url):
     """Opens a specific URL in Google Chrome on the connected Android device."""
@@ -120,12 +176,19 @@ def change_garena_password(username, password, current_password, new_password):
         {
             "action": "login",
             "description": "Thực hiện đăng nhập",
-            "delay": 1.5,
+            "delay": 2.0,
             "element": {
                 "username_coords": [176, 318],
                 "password_coords": [176, 390],
                 "login_button_coords": [176, 600]
             }
+        },
+        {
+            "action": "check",
+            "description": "Kiểm tra đăng nhập thành công",
+            "check_type": "login_success",
+            "retries": 10,
+            "interval": 0.5
         },
         {
             "action": "click",
@@ -212,6 +275,13 @@ def change_garena_password(username, password, current_password, new_password):
             }
         },
         {
+            "action": "check",
+            "description": "Kiểm tra đổi mật khẩu thành công",
+            "check_type": "change_success",
+            "retries": 10,
+            "interval": 0.5
+        },
+        {
             "action": "click",
             "description": "Nhấn vào nút 'avatar'",
             "element": {
@@ -281,6 +351,22 @@ def change_garena_password(username, password, current_password, new_password):
                 x1, y1, x2, y2 = coords
                 duration = 250
             input_swipe(x1, y1, x2, y2, duration)
+        elif action == 'check':
+            check_type = step.get('check_type')
+            retries = step.get('retries', 15)
+            interval = step.get('interval', 1.0)
+            if check_type == 'login_success':
+                ok = check_any_keyword_present(LOGIN_SUCCESS_KEYWORDS, retries=retries, interval_seconds=interval, context_label="login")
+                if not ok:
+                    # with open("error.txt", "a", encoding="utf-8") as out_f:
+                    #     out_f.write(f"{username}|{password}|LoiDangNhap\n")
+                    raise RuntimeError("LoiDangNhap")
+            elif check_type == 'change_success':
+                ok = check_any_keyword_present(CHANGE_PASS_SUCCESS_KEYWORDS, retries=retries, interval_seconds=interval, context_label="change_password")
+                if not ok:
+                    # with open("error.txt", "a", encoding="utf-8") as out_f:
+                    #     out_f.write(f"{username}|{password}|LoiDoiMatKhau\n")
+                    raise RuntimeError("LoiDoiMatKhau")
         else:
             print(f"Hành động không xác định: {action}")
 
@@ -335,6 +421,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Lỗi khi xử lý tài khoản {username}: {e}")
             with open("error.txt", "a", encoding="utf-8") as out_f:
-                out_f.write(f"{username}|{password}\n")
+                out_f.write(f"{username}|{password}|{e}\n")
         # Nghỉ ngắn giữa các tài khoản để tránh bị chặn
         time.sleep(2)
