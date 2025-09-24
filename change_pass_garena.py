@@ -376,7 +376,6 @@ def change_garena_password(username, password, current_password, new_password):
                 ok = check_any_keyword_present(CHANGE_PASS_SUCCESS_KEYWORDS, retries=retries, interval_seconds=interval, context_label="change_password")
                 if not ok:
                     error_msg = f"{username}|{password}|LoiDoiMatKhau"
-                    self.log_message(f"✗ LỖI khi xử lý tài khoản {username}: {e}")
                     with open(ERROR_FILE, "a", encoding="utf-8") as out_f:
                         out_f.write(error_msg + "\n")
                     continue

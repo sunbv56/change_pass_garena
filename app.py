@@ -158,7 +158,7 @@ class App(customtkinter.CTk):
             except Exception as e:
                 # The imported function raises RuntimeError on failure, catch it here.
                 error_msg = f"{username}|{password}|{e}"
-                self.log_message(f"✗ LỖI khi xử lý tài khoản {username}: {e}")
+                self.log_message(f"✗ Lỗi khi xử lý tài khoản {username}: {e}")
                 with open(ERROR_FILE, "a", encoding="utf-8") as out_f:
                     out_f.write(error_msg + "\n")
             
