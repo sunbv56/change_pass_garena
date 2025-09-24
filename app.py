@@ -36,6 +36,10 @@ class App(customtkinter.CTk):
 
         self.stop_button = customtkinter.CTkButton(self.controls_frame, text="Dừng", command=self.stop_processing, state="disabled")
         self.stop_button.pack(side="left", padx=5, pady=5)
+        
+        # Close Chrome Tabs button
+        self.close_tabs_button = customtkinter.CTkButton(self.controls_frame, text="🗑️", command=self.close_chrome_tabs, width=40)
+        self.close_tabs_button.pack(side="left", padx=5, pady=5)
 
         # --- Log Textbox ---
         self.log_textbox = customtkinter.CTkTextbox(self, state="disabled", wrap="word")
@@ -101,6 +105,19 @@ class App(customtkinter.CTk):
             self.status_label.configure(text="Đang dừng...")
             self.stop_event.set()
             self.stop_button.configure(state="disabled")
+
+    def close_chrome_tabs(self):
+        """Manually close all Chrome tabs."""
+        def close_tabs_thread():
+            try:
+                self.log_message("Đang đóng các tab Chrome...")
+                close_all_chrome_tabs()
+                self.log_message("✅ Đã đóng tất cả tab Chrome.")
+            except Exception as e:
+                self.log_message(f"❌ Lỗi khi đóng tab Chrome: {e}")
+        
+        # Run in a separate thread to avoid blocking UI
+        threading.Thread(target=close_tabs_thread, daemon=True).start()
 
     def run_automation_thread(self):
         """The main logic that runs in the background."""
