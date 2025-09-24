@@ -8,6 +8,9 @@ import re
 
 # --- Configuration ---
 LDPLAYER_ADB_ADDRESS = "localhost:5555"
+ACCOUNTS_FILE = "accounts.txt"
+OUTPUT_FILE = "output.txt"
+ERROR_FILE = "error.txt"
 # --- End Configuration ---
 
 # Ensure UTF-8 output on Windows consoles
@@ -23,13 +26,13 @@ def generate_password(length=9):
     """Tạo mật khẩu theo yêu cầu:
     - 1 chữ hoa (A-Z)
     - 1 số (0-9)
-    - 1 ký tự đặc biệt (@#$%&)
-    - Còn lại là chữ thường (a-z) hoặc ký tự đặc biệt (@#$%&)"""
+    - 1 ký tự đặc biệt (@#$&)
+    - Còn lại là chữ thường (a-z) hoặc ký tự đặc biệt (@#$&)"""
     
     if length < 8 or length > 16:
         raise ValueError("Độ dài mật khẩu phải từ 8 đến 16 ký tự.")
 
-    special_chars = "@#$%&"
+    special_chars = "@#$&"
 
     # Đảm bảo ít nhất 1 chữ hoa, 1 số, 1 ký tự đặc biệt
     upper = random.choice(string.ascii_uppercase)
@@ -122,16 +125,26 @@ def input_tap(x, y):
     print(f"Thực hiện nhấn vào tọa độ: ({x}, {y})")
     adb_command(command)
 
-def input_text(text):
-    """Simulates text input with escaping special characters."""
-    # escape các ký tự đặc biệt trong shell
-    special_chars = ['&', '|', ';', '<', '>', '(', ')', '$', '`', '\\', '"', "'", '!', '*', '?', '[', ']', '{', '}', '~']
+def input_text(text: str):
+    """
+    Simulates text input using ADB copy and paste functionality.
+    Uses clipboard to copy text and then paste it into the device.
+    """
+    special_chars = [
+        '&', '|', ';', '<', '>', '(', ')', '$', '`', '\\',
+        '"', "'", '!', '*', '?', '[', ']', '{', '}', '~', '#'
+    ]
+
     processed_text = ""
     for ch in text:
-        if ch in special_chars:
+        if ch == " ":
+            processed_text += "%s"
+        # elif ch == "@":
+        #     processed_text += "%40"
+        # elif ch == "%":
+        #     processed_text += "%25"
+        elif ch in special_chars:
             processed_text += "\\" + ch
-        elif ch == " ":
-            processed_text += "%s"   # adb dùng %s cho khoảng trắng
         else:
             processed_text += ch
 
@@ -362,7 +375,11 @@ def change_garena_password(username, password, current_password, new_password):
             elif check_type == 'change_success':
                 ok = check_any_keyword_present(CHANGE_PASS_SUCCESS_KEYWORDS, retries=retries, interval_seconds=interval, context_label="change_password")
                 if not ok:
-                    raise RuntimeError("LoiDoiMatKhau")
+                    error_msg = f"{username}|{password}|LoiDoiMatKhau"
+                    self.log_message(f"✗ LỖI khi xử lý tài khoản {username}: {e}")
+                    with open(ERROR_FILE, "a", encoding="utf-8") as out_f:
+                        out_f.write(error_msg + "\n")
+                    continue
         else:
             print(f"Hành động không xác định: {action}")
 
@@ -370,10 +387,6 @@ def change_garena_password(username, password, current_password, new_password):
 
 
 if __name__ == "__main__":
-    # --- THÔNG TIN CẦN THAY ĐỔI ---
-    ACCOUNTS_FILE = "accounts.txt"
-    # --- KẾT THÚC THÔNG TIN CẦN THAY ĐỔI ---
-
     if not os.path.exists(ACCOUNTS_FILE):
         print(f"Không tìm thấy file {ACCOUNTS_FILE}. Vui lòng tạo file với định dạng mỗi dòng: username|password")
         sys.exit(1)
@@ -407,16 +420,16 @@ if __name__ == "__main__":
             print(username, password, NEW_PASSWORD)
             change_garena_password(username, password, password, NEW_PASSWORD)
             print(f"\nThành công thông tin tài khoản là:\n{username}|{NEW_PASSWORD}|{password}")
-            with open("output.txt", "a", encoding="utf-8") as out_f:
+            with open(OUTPUT_FILE, "a", encoding="utf-8") as out_f:
                 out_f.write(f"{username}|{NEW_PASSWORD}|{password}\n")
         except KeyboardInterrupt:
             print("\nBị hủy bởi người dùng.")
-            with open("error.txt", "a", encoding="utf-8") as out_f:
+            with open(ERROR_FILE, "a", encoding="utf-8") as out_f:
                 out_f.write(f"{username}|{password}\n")
             sys.exit(130)
         except Exception as e:
             print(f"Lỗi khi xử lý tài khoản {username}: {e}")
-            # with open("error.txt", "a", encoding="utf-8") as out_f:
+            # with open(ERROR_FILE, "a", encoding="utf-8") as out_f:
             #     out_f.write(f"{username}|{password}|{e}\n")
         # Nghỉ ngắn giữa các tài khoản để tránh bị chặn
         time.sleep(2)
