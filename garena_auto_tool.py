@@ -239,6 +239,12 @@ def change_garena_password(username, password, new_password, stop_event, logger=
                 (["account.garena.com/security/password/done"], "change_password", "LoiDoiMatKhau")
             )
             if not check_any_keyword_present(keywords, stop_event, logger, retries, interval, context):
+                # Thực hiện logout trước khi raise LoiDoiMatKhau
+                if check_type == 'change_success':
+                    input_tap(511, 149, logger)  # Click avatar
+                    time.sleep(1)
+                    input_tap(328, 901, logger)  # Click logout
+                    time.sleep(1)
                 raise RuntimeError(error_msg)
 
     logger("✓ HOÀN TẤT QUÁ TRÌNH THAY ĐỔI MẬT KHẨU")
