@@ -275,7 +275,7 @@ def change_garena_password(username, password, new_password, stop_event, logger=
 
     steps = [
         {"action": "navigate", "description": "Mở trang tài khoản Garena", "url": "https://account.garena.com/"},
-        {"action": "login", "description": "Thực hiện đăng nhập", "delay": 2.0, "element": {"username_coords": [176, 318], "password_coords": [176, 390], "login_button_coords": [176, 600]}},
+        {"action": "login", "description": "Thực hiện đăng nhập", "delay": 2.5, "element": {"username_coords": [176, 318], "password_coords": [176, 390], "login_button_coords": [176, 600]}},
         {"action": "check", "description": "Kiểm tra đăng nhập thành công", "check_type": "login_success", "retries": 6, "interval": 0.5},
         {"action": "click", "description": "Nhấn vào mục 'Menu'", "delay": 1.5, "element": {"coords": [32, 150]}},
         {"action": "click", "description": "Nhấn vào nút 'Bảo mật'", "element": {"coords": [101, 327]}},
