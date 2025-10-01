@@ -1,5 +1,3 @@
-
-
 import customtkinter
 import threading
 import queue
@@ -10,14 +8,18 @@ import subprocess
 import random
 import string
 import re
+import requests
 
 # --- Configuration ---
 LDPLAYER_ADB_ADDRESS = "localhost:5555"
 ACCOUNTS_FILE = "accounts.txt"
 OUTPUT_FILE = "output.txt"
 ERROR_FILE = "error.txt"
+PROXY_FILE = "proxies.txt"
 CHROME_PACKAGE_NAME = "com.android.chrome"
 CHROME_MAIN_ACTIVITY = "com.google.android.apps.chrome.Main"
+API_KEY_KiotProxy = "Kbac764a3207e4410bbe66904b964ec13"
+first_Proxy = True # true: lấy proxy mới, false: lấy proxy hiện tại
 # --- End Configuration ---
 
 # ===================================================================================
@@ -170,6 +172,102 @@ def close_all_chrome_tabs(logger=print):
         run_adb_command(click_command)
         time.sleep(0.5)
     logger("--- Đã đóng các tab Chrome ---")
+
+def apply_proxy_via_adb(proxy: str, logger=print):
+    """Áp dụng proxy (http) ở mức hệ thống qua ADB. Định dạng proxy: host:port"""
+    if not proxy or ":" not in proxy:
+        logger("✗ Proxy không hợp lệ. Yêu cầu định dạng host:port")
+        return
+    host, port = proxy.split(":", 1)
+    host, port = host.strip(), port.strip()
+    if not host or not port.isdigit():
+        logger("✗ Proxy không hợp lệ. Yêu cầu định dạng host:port với port là số")
+        return
+
+    logger(f"Đang đặt proxy hệ thống: {host}:{port}")
+    # Một số thiết bị dùng các key khác nhau, thiết lập nhiều key để tăng tương thích
+    commands = [
+        f"shell settings put global http_proxy {host}:{port}",
+        # f"shell settings put system http_proxy {host}:{port}",
+        # f"shell settings put global global_http_proxy_host {host}",
+        # f"shell settings put global global_http_proxy_port {port}",
+        # "shell settings delete global http_proxy_pac",
+        # "shell settings delete system http_proxy_pac",
+    ]
+    for cmd in commands:
+        run_adb_command(cmd)
+
+    # Khởi động lại Chrome để nhận cấu hình mới
+    logger("Khởi động lại Chrome để áp dụng proxy mới...")
+    run_adb_command(f"shell am force-stop {CHROME_PACKAGE_NAME}")
+    time.sleep(1)
+    run_adb_command(f"shell monkey -p {CHROME_PACKAGE_NAME} -c android.intent.category.LAUNCHER 1")
+    time.sleep(1)
+
+def get_current_proxy(api_key: str):
+    """
+    Lấy proxy mới từ KiotProxy
+    :param api_key: Key của bạn (string)
+    :return: dict chứa thông tin proxy hoặc None nếu thất bại
+    """
+    url = "https://api.kiotproxy.com/api/v1/proxies/current"
+    params = {
+        "key": api_key
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        
+        if data.get("success"):
+            proxy_data = data["data"]
+            print("✅ Proxy mới nhận được:")
+            print(f"  - HTTP:  {proxy_data['http']}")
+            print(f"  - SOCKS5: {proxy_data['socks5']}")
+            print(f"  - IP: {proxy_data['realIpAddress']} ({proxy_data['location']})")
+            print(f"  - TTL: {proxy_data['ttl']} giây")
+            return proxy_data
+        else:
+            print("❌ Thất bại:", data.get("message"))
+            return None
+
+    except Exception as e:
+        print("Lỗi khi gọi API:", e)
+        return None
+
+def get_new_proxy(api_key: str, region: str = "random"):
+    """
+    Lấy proxy mới từ KiotProxy
+    :param api_key: Key của bạn (string)
+    :param region: Vùng proxy ('bac', 'trung', 'nam', 'random')
+    :return: dict chứa thông tin proxy hoặc None nếu thất bại
+    """
+    url = "https://api.kiotproxy.com/api/v1/proxies/new"
+    params = {
+        "key": api_key,
+        "region": region
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        
+        if data.get("success"):
+            proxy_data = data["data"]
+            print("✅ Proxy mới nhận được:")
+            print(f"  - HTTP:  {proxy_data['http']}")
+            print(f"  - SOCKS5: {proxy_data['socks5']}")
+            print(f"  - IP: {proxy_data['realIpAddress']} ({proxy_data['location']})")
+            print(f"  - TTL: {proxy_data['ttl']} giây")
+            return proxy_data
+        else:
+            print("❌ Thất bại:", data.get("message"))
+            print("=> Trả về proxy hiện tại!")
+            return get_current_proxy(api_key)
+
+    except Exception as e:
+        print("Lỗi khi gọi API:", e)
+        return None
 
 def change_garena_password(username, password, new_password, stop_event, logger=print):
     """Main function to automate the entire password change process."""
@@ -393,6 +491,15 @@ class App(customtkinter.CTk):
             end_time = time.time()
             self.log_message(f"Thời gian xử lý: {end_time - start_time:.2f} giây")
             
+            if idx % 5 == 0 and idx < total_accounts:
+                if self.stop_event.is_set():
+                    break
+                self.log_message("\n>>> Đạt mốc 5 tài khoản, đổi proxy qua ADB. <<<")
+                # change_proxy_via_adb(logger=self.log_message)
+                proxy = get_new_proxy(API_KEY_KiotProxy)
+                apply_proxy_via_adb(proxy['http'], logger=self.log_message)
+                time.sleep(2)
+
             if idx % 10 == 0 and idx < total_accounts:
                 if self.stop_event.is_set(): break
                 self.log_message("\n>>> Đạt mốc 10 tài khoản, dọn dẹp Chrome. <<<")
