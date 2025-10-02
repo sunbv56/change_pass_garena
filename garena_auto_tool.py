@@ -165,13 +165,22 @@ def close_all_chrome_tabs(logger=print):
     run_adb_command(start_command)
     time.sleep(2)
 
-    click_coordinates = [(431, 77), (503, 79), (185, 225), (334, 592), (43, 80)]
+    click_coordinates = [(431, 77), (503, 79), (313, 369), (118, 213), (137, 575), (404, 860), (43, 80)]
     for i, (x, y) in enumerate(click_coordinates, 1):
-        logger(f"   Thực hiện nhấn lần {i}/5 tại ({x}, {y}) để đóng tab.")
+        logger(f"   Thực hiện nhấn lần {i}/{len(click_coordinates)} tại ({x}, {y}) để đóng tab.")
         click_command = f"shell input tap {x} {y}"
         run_adb_command(click_command)
         time.sleep(0.5)
     logger("--- Đã đóng các tab Chrome ---")
+
+def delete_proxy_via_adb(logger=print):
+    """Xóa proxy hệ thống qua ADB."""
+    commands = [
+        "shell settings delete global http_proxy",
+        # "shell settings delete system http_proxy",
+    ]
+    for cmd in commands:
+        run_adb_command(cmd)
 
 def apply_proxy_via_adb(proxy: str, logger=print):
     """Áp dụng proxy (http) ở mức hệ thống qua ADB. Định dạng proxy: host:port"""
@@ -275,7 +284,7 @@ def change_garena_password(username, password, new_password, stop_event, logger=
 
     steps = [
         {"action": "navigate", "description": "Mở trang tài khoản Garena", "url": "https://account.garena.com/"},
-        {"action": "login", "description": "Thực hiện đăng nhập", "delay": 2.5, "element": {"username_coords": [176, 318], "password_coords": [176, 390], "login_button_coords": [176, 600]}},
+        {"action": "login", "description": "Thực hiện đăng nhập", "delay": 3, "element": {"username_coords": [176, 318], "password_coords": [176, 390], "login_button_coords": [176, 600]}},
         {"action": "check", "description": "Kiểm tra đăng nhập thành công", "check_type": "login_success", "retries": 6, "interval": 0.5},
         {"action": "click", "description": "Nhấn vào mục 'Menu'", "delay": 1.5, "element": {"coords": [32, 150]}},
         {"action": "click", "description": "Nhấn vào nút 'Bảo mật'", "element": {"coords": [101, 327]}},
@@ -313,6 +322,12 @@ def change_garena_password(username, password, new_password, stop_event, logger=
             time.sleep(0.5)
             input_text(password, logger)
             time.sleep(0.5)
+            value_swipe = [200, 800, 200, 400, 250]
+            input_swipe(*value_swipe, logger=logger)
+            time.sleep(0.5)
+            value_swipe = [200, 400, 200, 800, 250]
+            input_swipe(*value_swipe, logger=logger)
+            time.sleep(0.5)
             input_tap(elem['login_button_coords'][0], elem['login_button_coords'][1], logger)
         elif action == 'click':
             coords = step['element']['coords']
@@ -332,7 +347,7 @@ def change_garena_password(username, password, new_password, stop_event, logger=
             check_type = step.get('check_type')
             retries, interval = step.get('retries', 15), step.get('interval', 1.0)
             keywords, context, error_msg = (
-                (["SECURITY LEVEL", "SENSITIVE OPERATION", "LOG IN HISTORY"], "login", "LoiDangNhap")
+                (["SECURITY LEVEL", "SENSITIVE OPERATION", "LOG IN HISTORY", "MỨC ĐỘ BẢO MẬT", "HOẠT ĐỘNG TÀI KHOẢN", "LỊCH SỬ ĐĂNG NHẬP"], "login", "LoiDangNhap")
                 if check_type == 'login_success' else
                 (["account.garena.com/security/password/done"], "change_password", "LoiDoiMatKhau")
             )
@@ -344,6 +359,10 @@ def change_garena_password(username, password, new_password, stop_event, logger=
                     input_tap(328, 901, logger)  # Click logout
                     time.sleep(1)
                 raise RuntimeError(error_msg)
+
+        if stop_event.is_set():
+            logger("! Quá trình bị dừng bởi người dùng.")
+            raise InterruptedError("Process stopped by user")
 
     logger("✓ HOÀN TẤT QUÁ TRÌNH THAY ĐỔI MẬT KHẨU")
 
@@ -468,7 +487,13 @@ class App(customtkinter.CTk):
                 self.log_message("\nQuá trình đã bị dừng bởi người dùng.")
                 self.log_queue.put("PROCESS_STOPPED")
                 return
-            
+            if idx == 1:
+                self.log_message(f"\n===== Thiết lập proxy =====")
+                proxy = get_new_proxy(API_KEY_KiotProxy)
+                apply_proxy_via_adb(proxy['http'], logger=self.log_message)
+                self.log_message(f"Proxy đã được thiết lập: {proxy['http']}")
+                time.sleep(1)
+
             self.log_queue.put(f"STATUS:Đang xử lý {idx}/{total_accounts}: {username}")
             self.log_message(f"\n===== XỬ LÝ TÀI KHOẢN {idx}/{total_accounts}: {username} =====")
             
@@ -490,24 +515,29 @@ class App(customtkinter.CTk):
             
             end_time = time.time()
             self.log_message(f"Thời gian xử lý: {end_time - start_time:.2f} giây")
+            if end_time - start_time < 30:
+                delay = 30 - (end_time - start_time)
+                time.sleep(delay)
             
-            if idx % 5 == 0 and idx < total_accounts:
+            if idx % 4 == 0 and idx < total_accounts:
                 if self.stop_event.is_set():
                     break
-                self.log_message("\n>>> Đạt mốc 5 tài khoản, đổi proxy qua ADB. <<<")
+
+                self.log_message("\n>>> Đạt mốc 4 tài khoản<<<")
+                self.log_message("\n>>> Dọn dẹp Chrome. <<<")
+                close_all_chrome_tabs(logger=self.log_message)
+                time.sleep(2)
+
+                self.log_message("\n>>> Đổi proxy qua ADB. <<<")
                 # change_proxy_via_adb(logger=self.log_message)
                 proxy = get_new_proxy(API_KEY_KiotProxy)
                 apply_proxy_via_adb(proxy['http'], logger=self.log_message)
                 time.sleep(2)
 
-            if idx % 10 == 0 and idx < total_accounts:
-                if self.stop_event.is_set(): break
-                self.log_message("\n>>> Đạt mốc 10 tài khoản, dọn dẹp Chrome. <<<")
-                close_all_chrome_tabs(logger=self.log_message)
-                time.sleep(2)
-
             time.sleep(2)
-
+        
+        self.log_message("\n>>> Quá trình hoàn tất, xóa proxy. <<<")
+        delete_proxy_via_adb(logger=self.log_message)
         self.log_queue.put("PROCESS_FINISHED" if not self.stop_event.is_set() else "PROCESS_STOPPED")
 
 if __name__ == "__main__":
