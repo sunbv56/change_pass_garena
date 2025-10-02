@@ -1,4 +1,5 @@
 import customtkinter
+import tkinter as tk
 import threading
 import queue
 import os
@@ -165,7 +166,7 @@ def close_all_chrome_tabs(logger=print):
     run_adb_command(start_command)
     time.sleep(2)
 
-    click_coordinates = [(431, 77), (503, 79), (313, 369), (118, 213), (137, 575), (404, 860), (43, 80)]
+    click_coordinates = [(431, 77), (503, 79), (313, 369), (260, 280), (245, 640), (415, 790), (43, 80)]
     for i, (x, y) in enumerate(click_coordinates, 1):
         logger(f"   Thực hiện nhấn lần {i}/{len(click_coordinates)} tại ({x}, {y}) để đóng tab.")
         click_command = f"shell input tap {x} {y}"
@@ -354,6 +355,8 @@ def change_garena_password(username, password, new_password, stop_event, logger=
             if not check_any_keyword_present(keywords, stop_event, logger, retries, interval, context):
                 # Thực hiện logout trước khi raise LoiDoiMatKhau
                 if check_type == 'change_success':
+                    open_url_in_chrome("https://account.garena.com/", logger)
+                    time.sleep(2)
                     input_tap(511, 149, logger)  # Click avatar
                     time.sleep(1)
                     input_tap(328, 901, logger)  # Click logout
@@ -393,6 +396,30 @@ class App(customtkinter.CTk):
 
         self.close_tabs_button = customtkinter.CTkButton(self.controls_frame, text="Dọn dẹp Chrome", command=self.manual_close_chrome_tabs)
         self.close_tabs_button.pack(side="left", padx=5, pady=5)
+
+        # KiotProxy options
+        self.use_proxy_var = customtkinter.BooleanVar(value=True)
+        self.kiot_checkbox = customtkinter.CTkCheckBox(
+            self.controls_frame,
+            text="KiotProxy",
+            variable=self.use_proxy_var,
+            command=self.on_toggle_proxy
+        )
+        self.kiot_checkbox.pack(side="left", padx=10, pady=5)
+
+        self.api_key_entry = customtkinter.CTkEntry(
+            self.controls_frame,
+            placeholder_text="API key KiotProxy",
+            width=220
+        )
+        # Prefill if default is provided; visibility controlled by checkbox
+        try:
+            if API_KEY_KiotProxy:
+                self.api_key_entry.insert(0, API_KEY_KiotProxy)
+        except Exception:
+            pass
+        # Ensure initial visibility matches default checked state
+        self.on_toggle_proxy()
 
         self.log_textbox = customtkinter.CTkTextbox(self, state="disabled", wrap="word")
         self.log_textbox.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="nsew")
@@ -457,6 +484,15 @@ class App(customtkinter.CTk):
             close_all_chrome_tabs(logger=self.log_message)
         threading.Thread(target=close_tabs_thread, daemon=True).start()
 
+    def on_toggle_proxy(self):
+        if self.use_proxy_var.get():
+            self.api_key_entry.pack(side="left", padx=5, pady=5)
+        else:
+            try:
+                self.api_key_entry.pack_forget()
+            except Exception:
+                pass
+
     def run_automation_thread(self):
         if not connect_to_device(logger=self.log_message):
             self.log_queue.put("PROCESS_FINISHED")
@@ -482,16 +518,34 @@ class App(customtkinter.CTk):
             return
 
         total_accounts = len(accounts)
+
+        # Determine proxy usage based on UI state
+        use_proxy = False
+        api_key = ""
+        try:
+            use_proxy = bool(self.use_proxy_var.get())
+            api_key = (self.api_key_entry.get() or "").strip()
+        except Exception:
+            use_proxy = False
+            api_key = ""
+
+        if use_proxy and not api_key:
+            self.log_message("Cảnh báo: Bật KiotProxy nhưng chưa nhập API key. Sẽ chạy KHÔNG proxy.")
+            use_proxy = False
         for idx, (username, password) in enumerate(accounts, start=1):
             if self.stop_event.is_set():
                 self.log_message("\nQuá trình đã bị dừng bởi người dùng.")
                 self.log_queue.put("PROCESS_STOPPED")
                 return
-            if idx == 1:
+            if idx == 1 and use_proxy:
                 self.log_message(f"\n===== Thiết lập proxy =====")
-                proxy = get_new_proxy(API_KEY_KiotProxy)
-                apply_proxy_via_adb(proxy['http'], logger=self.log_message)
-                self.log_message(f"Proxy đã được thiết lập: {proxy['http']}")
+                proxy = get_new_proxy(api_key)
+                if proxy and proxy.get('http'):
+                    apply_proxy_via_adb(proxy['http'], logger=self.log_message)
+                    self.log_message(f"Proxy đã được thiết lập: {proxy['http']}")
+                else:
+                    self.log_message("Không thể lấy proxy. Sẽ tiếp tục không dùng proxy cho phiên này.")
+                    use_proxy = False
                 time.sleep(1)
 
             self.log_queue.put(f"STATUS:Đang xử lý {idx}/{total_accounts}: {username}")
@@ -515,7 +569,7 @@ class App(customtkinter.CTk):
             
             end_time = time.time()
             self.log_message(f"Thời gian xử lý: {end_time - start_time:.2f} giây")
-            if end_time - start_time < 30:
+            if (end_time - start_time < 30) and (not self.stop_event.is_set()):
                 delay = 30 - (end_time - start_time)
                 time.sleep(delay)
             
@@ -527,17 +581,22 @@ class App(customtkinter.CTk):
                 self.log_message("\n>>> Dọn dẹp Chrome. <<<")
                 close_all_chrome_tabs(logger=self.log_message)
                 time.sleep(2)
-
-                self.log_message("\n>>> Đổi proxy qua ADB. <<<")
-                # change_proxy_via_adb(logger=self.log_message)
-                proxy = get_new_proxy(API_KEY_KiotProxy)
-                apply_proxy_via_adb(proxy['http'], logger=self.log_message)
-                time.sleep(2)
+                
+                if use_proxy:
+                    self.log_message("\n>>> Đổi proxy qua ADB. <<<")
+                    # change_proxy_via_adb(logger=self.log_message)
+                    proxy = get_new_proxy(api_key)
+                    if proxy and proxy.get('http'):
+                        apply_proxy_via_adb(proxy['http'], logger=self.log_message)
+                    else:
+                        self.log_message("Không thể lấy proxy mới. Giữ proxy hiện tại.")
+                    time.sleep(2)
 
             time.sleep(2)
         
-        self.log_message("\n>>> Quá trình hoàn tất, xóa proxy. <<<")
-        delete_proxy_via_adb(logger=self.log_message)
+        if use_proxy:
+            self.log_message("\n>>> Quá trình hoàn tất, xóa proxy. <<<")
+            delete_proxy_via_adb(logger=self.log_message)
         self.log_queue.put("PROCESS_FINISHED" if not self.stop_event.is_set() else "PROCESS_STOPPED")
 
 if __name__ == "__main__":
