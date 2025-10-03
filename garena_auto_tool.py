@@ -10,25 +10,105 @@ import random
 import string
 import re
 import requests
+import json
 
-# --- Configuration ---
-LDPLAYER_ADB_ADDRESS = "localhost:5555"
-ACCOUNTS_FILE = "accounts.txt"
-OUTPUT_FILE = "output.txt"
-ERROR_FILE = "error.txt"
-PROXY_FILE = "proxies.txt"
-CHROME_PACKAGE_NAME = "com.android.chrome"
-CHROME_MAIN_ACTIVITY = "com.google.android.apps.chrome.Main"
-API_KEY_KiotProxy = "Kbac764a3207e4410bbe66904b964ec13"
-first_Proxy = True # true: lấy proxy mới, false: lấy proxy hiện tại
+# --- Configuration Loading ---
+def load_config():
+    """Load configuration from config.json file."""
+    config_file = "config.json"
+    default_config = {
+        "ldplayer": {"adb_address": "localhost:5555"},
+        "files": {
+            "accounts_file": "accounts.txt",
+            "output_file": "output.txt", 
+            "error_file": "error.txt",
+            "proxy_file": "proxies.txt"
+        },
+        "chrome": {
+            "package_name": "com.android.chrome",
+            "main_activity": "com.google.android.apps.chrome.Main"
+        },
+        "proxy": {
+            "api_key_kiotproxy": "",
+            "enabled": True
+        },
+        "automation": {
+            "password_length": 9,
+            "delay_between_accounts": 30,
+            "cleanup_interval": 4,
+            "retry_attempts": 6,
+            "retry_interval": 0.5
+        },
+        "keywords": {
+            "login_success": [
+                "SECURITY LEVEL", "SENSITIVE OPERATION", "LOG IN HISTORY", 
+                "MỨC ĐỘ BẢO MẬT", "HOẠT ĐỘNG TÀI KHOẢN", "LỊCH SỬ ĐĂNG NHẬP"
+            ],
+            "change_success": [
+                "account.garena.com/security/password/done"
+            ]
+        }
+    }
+    
+    try:
+        if os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                for key, value in default_config.items():
+                    if key not in config:
+                        config[key] = value
+                    elif isinstance(value, dict):
+                        for sub_key, sub_value in value.items():
+                            if sub_key not in config[key]:
+                                config[key][sub_key] = sub_value
+                return config
+        else:
+            print(f"Warning: {config_file} not found. Using default configuration.")
+            return default_config
+    except Exception as e:
+        print(f"Error loading config: {e}. Using default configuration.")
+        return default_config
+
+def save_config(config):
+    """Save configuration to config.json file."""
+    config_file = "config.json"
+    try:
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"Error saving config: {e}")
+        return False
+
+def update_api_key(api_key):
+    """Update API key in config and save to file."""
+    global CONFIG
+    CONFIG["proxy"]["api_key_kiotproxy"] = api_key
+    return save_config(CONFIG)
+
+# Load configuration
+CONFIG = load_config()
+
+# Extract commonly used config values
+LDPLAYER_ADB_ADDRESS = CONFIG["ldplayer"]["adb_address"]
+ACCOUNTS_FILE = CONFIG["files"]["accounts_file"]
+OUTPUT_FILE = CONFIG["files"]["output_file"]
+ERROR_FILE = CONFIG["files"]["error_file"]
+PROXY_FILE = CONFIG["files"]["proxy_file"]
+CHROME_PACKAGE_NAME = CONFIG["chrome"]["package_name"]
+CHROME_MAIN_ACTIVITY = CONFIG["chrome"]["main_activity"]
+API_KEY_KiotProxy = CONFIG["proxy"]["api_key_kiotproxy"]
 # --- End Configuration ---
 
 # ===================================================================================
 # == CORE AUTOMATION LOGIC (from change_pass_garena.py & close_chrome_tabs.py) ==
 # ===================================================================================
 
-def generate_password(length=9):
+def generate_password(length=None):
     """Tạo mật khẩu theo yêu cầu: 1 chữ hoa, 1 số, 1 ký tự đặc biệt."""
+    if length is None:
+        length = CONFIG["automation"]["password_length"]
     if length < 8 or length > 16:
         raise ValueError("Độ dài mật khẩu phải từ 8 đến 16 ký tự.")
     special_chars = "@#$&"
@@ -212,7 +292,7 @@ def apply_proxy_via_adb(proxy: str, logger=print):
     run_adb_command(f"shell am force-stop {CHROME_PACKAGE_NAME}")
     time.sleep(1)
     run_adb_command(f"shell monkey -p {CHROME_PACKAGE_NAME} -c android.intent.category.LAUNCHER 1")
-    time.sleep(1)
+    time.sleep(2)
 
 def get_current_proxy(api_key: str):
     """
@@ -286,7 +366,7 @@ def change_garena_password(username, password, new_password, stop_event, logger=
     steps = [
         {"action": "navigate", "description": "Mở trang tài khoản Garena", "url": "https://account.garena.com/"},
         {"action": "login", "description": "Thực hiện đăng nhập", "delay": 3, "element": {"username_coords": [176, 318], "password_coords": [176, 390], "login_button_coords": [176, 600]}},
-        {"action": "check", "description": "Kiểm tra đăng nhập thành công", "check_type": "login_success", "retries": 6, "interval": 0.5},
+        {"action": "check", "description": "Kiểm tra đăng nhập thành công", "check_type": "login_success", "retries": CONFIG["automation"]["retry_attempts"], "interval": CONFIG["automation"]["retry_interval"]},
         {"action": "click", "description": "Nhấn vào mục 'Menu'", "delay": 1.5, "element": {"coords": [32, 150]}},
         {"action": "click", "description": "Nhấn vào nút 'Bảo mật'", "element": {"coords": [101, 327]}},
         {"action": "click", "description": "Nhấn vào nút 'Thay đổi'", "element": {"coords": [462, 507]}},
@@ -297,7 +377,7 @@ def change_garena_password(username, password, new_password, stop_event, logger=
         {"action": "input", "description": "Nhập mật khẩu mới", "data": "new_password", "element": {"coords": [42, 410]}},
         {"action": "input", "description": "Xác nhận mật khẩu mới", "data": "confirm_new_password", "element": {"coords": [45, 653]}},
         {"action": "click", "description": "Nhấn nút 'Áp dụng'", "element": {"coords": [121, 739]}},
-        {"action": "check", "description": "Kiểm tra đổi mật khẩu thành công", "check_type": "change_success", "retries": 6, "interval": 0.5},
+        {"action": "check", "description": "Kiểm tra đổi mật khẩu thành công", "check_type": "change_success", "retries": CONFIG["automation"]["retry_attempts"], "interval": CONFIG["automation"]["retry_interval"]},
         {"action": "click", "description": "Nhấn vào nút 'avatar'", "element": {"coords": [511, 149]}},
         {"action": "click", "description": "Nhấn vào nút 'Log out'", "element": {"coords": [328, 901]}},
     ]
@@ -348,9 +428,9 @@ def change_garena_password(username, password, new_password, stop_event, logger=
             check_type = step.get('check_type')
             retries, interval = step.get('retries', 15), step.get('interval', 1.0)
             keywords, context, error_msg = (
-                (["SECURITY LEVEL", "SENSITIVE OPERATION", "LOG IN HISTORY", "MỨC ĐỘ BẢO MẬT", "HOẠT ĐỘNG TÀI KHOẢN", "LỊCH SỬ ĐĂNG NHẬP"], "login", "LoiDangNhap")
+                (CONFIG["keywords"]["login_success"], "login", "LoiDangNhap")
                 if check_type == 'login_success' else
-                (["account.garena.com/security/password/done"], "change_password", "LoiDoiMatKhau")
+                (CONFIG["keywords"]["change_success"], "change_password", "LoiDoiMatKhau")
             )
             if not check_any_keyword_present(keywords, stop_event, logger, retries, interval, context):
                 # Thực hiện logout trước khi raise LoiDoiMatKhau
@@ -412,10 +492,10 @@ class App(customtkinter.CTk):
             placeholder_text="API key KiotProxy",
             width=220
         )
-        # Prefill if default is provided; visibility controlled by checkbox
+        # Prefill with saved API key from config
         try:
-            if API_KEY_KiotProxy:
-                self.api_key_entry.insert(0, API_KEY_KiotProxy)
+            if CONFIG["proxy"]["api_key_kiotproxy"]:
+                self.api_key_entry.insert(0, CONFIG["proxy"]["api_key_kiotproxy"])
         except Exception:
             pass
         # Ensure initial visibility matches default checked state
@@ -461,6 +541,12 @@ class App(customtkinter.CTk):
             self.after(100, self.process_log_queue)
 
     def start_processing(self):
+        # Save API key to config before starting
+        api_key = self.api_key_entry.get().strip()
+        if api_key:
+            update_api_key(api_key)
+            self.log_message(f"Đã lưu API key vào config.json")
+        
         self.start_button.configure(state="disabled")
         self.stop_button.configure(state="normal")
         self.log_textbox.configure(state="normal")
@@ -519,18 +605,19 @@ class App(customtkinter.CTk):
 
         total_accounts = len(accounts)
 
-        # Determine proxy usage based on UI state
+        # Determine proxy usage based on UI state and config
         use_proxy = False
         api_key = ""
         try:
             use_proxy = bool(self.use_proxy_var.get())
-            api_key = (self.api_key_entry.get() or "").strip()
+            # Use API key from config (already saved when start_processing was called)
+            api_key = CONFIG["proxy"]["api_key_kiotproxy"].strip()
         except Exception:
             use_proxy = False
             api_key = ""
 
         if use_proxy and not api_key:
-            self.log_message("Cảnh báo: Bật KiotProxy nhưng chưa nhập API key. Sẽ chạy KHÔNG proxy.")
+            self.log_message("Cảnh báo: Bật KiotProxy nhưng chưa có API key. Sẽ chạy KHÔNG proxy.")
             use_proxy = False
         for idx, (username, password) in enumerate(accounts, start=1):
             if self.stop_event.is_set():
@@ -546,7 +633,7 @@ class App(customtkinter.CTk):
                 else:
                     self.log_message("Không thể lấy proxy. Sẽ tiếp tục không dùng proxy cho phiên này.")
                     use_proxy = False
-                time.sleep(1)
+                time.sleep(2)
 
             self.log_queue.put(f"STATUS:Đang xử lý {idx}/{total_accounts}: {username}")
             self.log_message(f"\n===== XỬ LÝ TÀI KHOẢN {idx}/{total_accounts}: {username} =====")
@@ -569,15 +656,17 @@ class App(customtkinter.CTk):
             
             end_time = time.time()
             self.log_message(f"Thời gian xử lý: {end_time - start_time:.2f} giây")
-            if (end_time - start_time < 30) and (not self.stop_event.is_set()):
-                delay = 30 - (end_time - start_time)
+            delay_between_accounts = CONFIG["automation"]["delay_between_accounts"]
+            if (end_time - start_time < delay_between_accounts) and (not self.stop_event.is_set()):
+                delay = delay_between_accounts - (end_time - start_time)
                 time.sleep(delay)
             
-            if idx % 4 == 0 and idx < total_accounts:
+            cleanup_interval = CONFIG["automation"]["cleanup_interval"]
+            if idx % cleanup_interval == 0 and idx < total_accounts:
                 if self.stop_event.is_set():
                     break
 
-                self.log_message("\n>>> Đạt mốc 4 tài khoản<<<")
+                self.log_message(f"\n>>> Đạt mốc {cleanup_interval} tài khoản<<<")
                 self.log_message("\n>>> Dọn dẹp Chrome. <<<")
                 close_all_chrome_tabs(logger=self.log_message)
                 time.sleep(2)
