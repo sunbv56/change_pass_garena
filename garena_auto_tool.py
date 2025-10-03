@@ -10,7 +10,10 @@ import random
 import string
 import re
 import requests
+import hashlib
 import json
+import subprocess
+import platform
 
 # --- Configuration Loading ---
 def load_config():
@@ -100,6 +103,92 @@ CHROME_PACKAGE_NAME = CONFIG["chrome"]["package_name"]
 CHROME_MAIN_ACTIVITY = CONFIG["chrome"]["main_activity"]
 API_KEY_KiotProxy = CONFIG["proxy"]["api_key_kiotproxy"]
 # --- End Configuration ---
+
+API_URL = "https://garena-tool-license-server.onrender.com/validate" # URL server của bạn
+LICENSE_FILE = ".license_key"
+
+def get_hwid():
+    """Lấy một định danh phần cứng duy nhất cho máy."""
+    try:
+        if platform.system() == "Windows":
+            # Lấy serial number của ổ đĩa C:
+            output = subprocess.check_output('wmic path win32_physicalmedia get SerialNumber', shell=True, text=True)
+            serial = output.split('\n')[1].strip()
+            # Lấy CPU ID
+            output_cpu = subprocess.check_output('wmic cpu get ProcessorId', shell=True, text=True)
+            cpu_id = output_cpu.split('\n')[1].strip()
+            return f"{cpu_id}-{serial}"
+        else: # Fallback for other OS
+            # Trên Linux/Mac, có thể dùng các lệnh khác
+            return "UNSUPPORTED_OS"
+    except Exception as e:
+        print(f"Không thể lấy HWID: {e}")
+        return "HWID_ERROR"
+
+# def check_license():
+#     # Bắt buộc phải nhập lại key mỗi khi chạy
+#     return activate_license()
+
+def activate_license():
+    # Tạo một cửa sổ nhỏ để nhập key
+    win = customtkinter.CTk()
+    win.title("Kích hoạt")
+    win.geometry("350x200")
+    
+    # Biến để theo dõi trạng thái kích hoạt
+    license_valid = False
+
+    label = customtkinter.CTkLabel(win, text="Vui lòng nhập License Key:")
+    label.pack(pady=10)
+
+    entry = customtkinter.CTkEntry(win, width=300)
+    entry.pack(pady=5)
+    
+    status_label = customtkinter.CTkLabel(win, text="")
+    status_label.pack(pady=5)
+
+    def on_activate():
+        nonlocal license_valid
+        key = entry.get().strip()
+        if not key:
+            status_label.configure(text="Key không được để trống.", text_color="red")
+            return
+
+        hwid = get_hwid()
+        status_label.configure(text="Đang kiểm tra...", text_color="yellow")
+        win.update()
+
+        try:
+            response = requests.post(API_URL, json={"license_key": key, "hwid": hwid}, timeout=15)
+            data = response.json()
+
+            if data.get("status") == "success":
+                hwid_hash = hashlib.sha256(hwid.encode()).hexdigest()
+                with open(LICENSE_FILE, 'w') as f:
+                    f.write(f"{key}:{hwid_hash}")
+                status_label.configure(text="Kích hoạt thành công!", text_color="green")
+                license_valid = True
+                win.after(1000, win.destroy) # Đóng cửa sổ sau 1 giây
+            else:
+                status_label.configure(text=f"Lỗi: {data.get('message', 'Unknown error')}", text_color="red")
+        except requests.RequestException as e:
+            status_label.configure(text=f"Lỗi mạng: {e}", text_color="red")
+
+    def on_closing():
+        # Thoát chương trình khi đóng cửa sổ
+        win.destroy()
+        sys.exit()
+
+    button = customtkinter.CTkButton(win, text="Kích hoạt", command=on_activate)
+    button.pack(pady=10)
+    
+    # Thoát chương trình khi đóng cửa sổ bằng nút X
+    win.protocol("WM_DELETE_WINDOW", on_closing)
+
+    win.mainloop()
+    
+    # Chỉ trả về True nếu license được xác thực thành công
+    return license_valid
 
 # ===================================================================================
 # == CORE AUTOMATION LOGIC (from change_pass_garena.py & close_chrome_tabs.py) ==
@@ -689,14 +778,19 @@ class App(customtkinter.CTk):
         self.log_queue.put("PROCESS_FINISHED" if not self.stop_event.is_set() else "PROCESS_STOPPED")
 
 if __name__ == "__main__":
-    if os.name == 'nt':
-        try:
-            sys.stdout.reconfigure(encoding='utf-8')
-            sys.stderr.reconfigure(encoding='utf-8')
-        except (AttributeError, ValueError):
-            pass
-        os.system('chcp 65001 >NUL')
+    if activate_license():
+        if os.name == 'nt':
+            try:
+                sys.stdout.reconfigure(encoding='utf-8')
+                sys.stderr.reconfigure(encoding='utf-8')
+            except (AttributeError, ValueError):
+                pass
+            os.system('chcp 65001 >NUL')
 
-    app = App()
-    app.mainloop()
+        app = App()
+        app.mainloop()
+    else:
+         # Người dùng đóng cửa sổ kích hoạt mà không thành công
+        print("Kích hoạt không thành công. Thoát chương trình.")
+        sys.exit()
 
