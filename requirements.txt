@@ -1,0 +1,18 @@
+# External libraries that need to be installed via pip
+customtkinter>=5.2.0
+requests>=2.28.0
+
+# Built-in Python libraries (no installation needed)
+# tkinter - GUI framework (built-in)
+# threading - Threading support (built-in)
+# queue - Queue data structure (built-in)
+# os - Operating system interface (built-in)
+# sys - System-specific parameters (built-in)
+# time - Time-related functions (built-in)
+# subprocess - Subprocess management (built-in)
+# random - Random number generation (built-in)
+# string - String operations (built-in)
+# re - Regular expressions (built-in)
+# hashlib - Hash functions (built-in)
+# json - JSON encoder/decoder (built-in)
+# platform - Platform identification (built-in)

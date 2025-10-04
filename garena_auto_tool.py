@@ -90,6 +90,23 @@ def update_api_key(api_key):
     CONFIG["proxy"]["api_key_kiotproxy"] = api_key
     return save_config(CONFIG)
 
+# Thêm vào đầu file
+def get_adb_path():
+    """Finds the path to the bundled adb.exe or system adb."""
+    # Ưu tiên tìm adb.exe trong cùng thư mục với file .exe
+    if getattr(sys, 'frozen', False):
+        # Chạy từ file .exe đã đóng gói
+        base_path = sys._MEIPASS
+    else:
+        # Chạy từ file .py bình thường
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    bundled_adb = os.path.join(base_path, 'bin', 'adb.exe')
+    if os.path.exists(bundled_adb):
+        # Trả về đường dẫn trong dấu ngoặc kép để xử lý các đường dẫn có khoảng trắng
+        return f'"{bundled_adb}"'
+    return "adb" # Dùng adb mặc định trong PATH nếu không tìm thấy
+
 # Load configuration
 CONFIG = load_config()
 
@@ -102,6 +119,7 @@ PROXY_FILE = CONFIG["files"]["proxy_file"]
 CHROME_PACKAGE_NAME = CONFIG["chrome"]["package_name"]
 CHROME_MAIN_ACTIVITY = CONFIG["chrome"]["main_activity"]
 API_KEY_KiotProxy = CONFIG["proxy"]["api_key_kiotproxy"]
+ADB_PATH = get_adb_path() # Gọi hàm này một lần ở đầu file
 # --- End Configuration ---
 
 API_URL = "https://garena-tool-license-server.onrender.com/validate" # URL server của bạn
@@ -211,7 +229,7 @@ def generate_password(length=None):
 
 def run_adb_command(command, timeout=15):
     """Runs a complete ADB command and returns its output."""
-    full_command = f"adb -s {LDPLAYER_ADB_ADDRESS} {command}"
+    full_command = f"{ADB_PATH} -s {LDPLAYER_ADB_ADDRESS} {command}"
     try:
         result = subprocess.run(
             full_command,
@@ -526,9 +544,9 @@ def change_garena_password(username, password, new_password, stop_event, logger=
                 if check_type == 'change_success':
                     open_url_in_chrome("https://account.garena.com/", logger)
                     time.sleep(2)
-                    input_tap(511, 149, logger)  # Click avatar
+                    input_tap(511, 149, logger)
                     time.sleep(1)
-                    input_tap(328, 901, logger)  # Click logout
+                    input_tap(328, 901, logger)
                     time.sleep(1)
                 raise RuntimeError(error_msg)
 
@@ -779,6 +797,20 @@ class App(customtkinter.CTk):
 
 if __name__ == "__main__":
     if activate_license():
+        # Tự động tạo các file cần thiết nếu chưa có
+        files_to_check = [ACCOUNTS_FILE, OUTPUT_FILE, ERROR_FILE, PROXY_FILE]
+        for filename in files_to_check:
+            if not os.path.exists(filename):
+                with open(filename, 'w', encoding='utf-8') as f:
+                    print(f"Đã tạo file mặc định: {filename}")
+                    if "accounts" in filename:
+                        f.write("# Định dạng: username|password\n")
+                        f.write("# Ví dụ: garena_user1|my_pass_123\n")
+
+        # Đảm bảo config.json luôn tồn tại
+        if not os.path.exists("config.json"):
+            save_config(CONFIG) # Lưu config mặc định
+
         if os.name == 'nt':
             try:
                 sys.stdout.reconfigure(encoding='utf-8')

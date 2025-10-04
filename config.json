@@ -13,7 +13,7 @@
     "main_activity": "com.google.android.apps.chrome.Main"
   },
   "proxy": {
-    "api_key_kiotproxy": "",
+    "api_key_kiotproxy": "K5e247a7550844c759371284c680cc3a3",
     "enabled": true
   },
   "automation": {
