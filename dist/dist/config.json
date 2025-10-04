@@ -1,0 +1,39 @@
+{
+  "ldplayer": {
+    "adb_address": "localhost:5555"
+  },
+  "files": {
+    "accounts_file": "accounts.txt",
+    "output_file": "output.txt",
+    "error_file": "error.txt",
+    "proxy_file": "proxies.txt"
+  },
+  "chrome": {
+    "package_name": "com.android.chrome",
+    "main_activity": "com.google.android.apps.chrome.Main"
+  },
+  "proxy": {
+    "api_key_kiotproxy": "",
+    "enabled": true
+  },
+  "automation": {
+    "password_length": 9,
+    "delay_between_accounts": 30,
+    "cleanup_interval": 4,
+    "retry_attempts": 6,
+    "retry_interval": 0.5
+  },
+  "keywords": {
+    "login_success": [
+      "SECURITY LEVEL",
+      "SENSITIVE OPERATION",
+      "LOG IN HISTORY",
+      "MỨC ĐỘ BẢO MẬT",
+      "HOẠT ĐỘNG TÀI KHOẢN",
+      "LỊCH SỬ ĐĂNG NHẬP"
+    ],
+    "change_success": [
+      "account.garena.com/security/password/done"
+    ]
+  }
+}
